@@ -1,0 +1,33 @@
+name = "claude-bridge"
+main = "src/index.ts"
+compatibility_date = "2025-01-13"
+
+# =============================================================================
+# CUSTOM DOMAIN (Optional)
+# =============================================================================
+# Uncomment and modify to use your own domain:
+# routes = [
+#   { pattern = "api.yourdomain.com/*", zone_name = "yourdomain.com" }
+# ]
+
+# =============================================================================
+# SECRETS (Required for Cloudflare deployment)
+# =============================================================================
+# Set secrets via: bunx wrangler secret put <SECRET_NAME>
+#
+# Required:
+#   A4F_API_KEY      - A4F backend API key
+#   ALGION_API_KEY   - Algion backend API key
+#   VALID_API_KEYS   - Comma-separated user keys
+#   BACKEND          - "a4f" or "algion"
+#
+# Example:
+#   bunx wrangler secret put A4F_API_KEY
+#   bunx wrangler secret put ALGION_API_KEY
+#   bunx wrangler secret put VALID_API_KEYS
+# =============================================================================
+
+# Local development
+[dev]
+port = 4242
+local_protocol = "http"
