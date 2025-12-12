@@ -7,6 +7,7 @@ import type { BackendType, BackendConfig } from "./types";
 export const BACKENDS: Record<BackendType, BackendConfig> = {
   a4f: {
     baseUrl: "https://api.a4f.co/v1",
+    format: "openai",
     modelMapping: {
       // A4F uses full model names with provider prefix
       // These are direct mappings for common models
@@ -18,6 +19,7 @@ export const BACKENDS: Record<BackendType, BackendConfig> = {
   },
   algion: {
     baseUrl: "https://api.algion.dev/v1",
+    format: "openai", // Algion also supports OpenAI-compatible format
     modelMapping: {
       // Algion uses simplified model names
       // Direct mappings

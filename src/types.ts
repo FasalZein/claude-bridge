@@ -12,9 +12,11 @@ export interface Env {
 
 // Backend types
 export type BackendType = "a4f" | "algion";
+export type BackendFormat = "openai" | "anthropic";
 
 export interface BackendConfig {
   baseUrl: string;
+  format: BackendFormat;
   modelMapping: Record<string, string>;
 }
 

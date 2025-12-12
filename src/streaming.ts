@@ -6,6 +6,9 @@ import type { OpenAIRequest, OpenAIStreamChunk } from "./types";
 import { generateMessageId, mapFinishReason, estimateRequestTokens } from "./converter";
 import { countTokens } from "./tokenizer";
 
+// Request timeout for streaming (5 minutes)
+const STREAM_TIMEOUT_MS = 300000;
+
 export async function streamAndConvert(
   apiKey: string,
   baseUrl: string,
@@ -21,6 +24,9 @@ export async function streamAndConvert(
   let textStarted = false;
   let toolStarted = false;
   let stopReason: "end_turn" | "max_tokens" | "tool_use" = "end_turn";
+
+  console.log(`[Claude Bridge] Starting streaming request to ${baseUrl}`);
+  console.log(`[Claude Bridge] Model: ${openaiReq.model}`);
 
   return new ReadableStream({
     async start(controller) {
@@ -48,6 +54,13 @@ export async function streamAndConvert(
       );
 
       try {
+        const abortController = new AbortController();
+        const timeoutId = setTimeout(() => {
+          console.log(`[Claude Bridge] Request timeout after ${STREAM_TIMEOUT_MS}ms`);
+          abortController.abort();
+        }, STREAM_TIMEOUT_MS);
+        
+        console.log(`[Claude Bridge] Sending streaming request...`);
         const response = await fetch(`${baseUrl}/chat/completions`, {
           method: "POST",
           headers: {
@@ -55,7 +68,11 @@ export async function streamAndConvert(
             Authorization: `Bearer ${apiKey}`,
           },
           body: JSON.stringify(openaiReq),
+          signal: abortController.signal,
         });
+        
+        clearTimeout(timeoutId);
+        console.log(`[Claude Bridge] Got response: ${response.status}`);
 
         if (!response.ok) {
           const errorBody = await response.text();

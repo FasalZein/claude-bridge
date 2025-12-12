@@ -9,6 +9,9 @@ import { convertRequest, convertResponse, estimateRequestTokens } from "./conver
 import { countTokens } from "./tokenizer";
 import { streamAndConvert } from "./streaming";
 
+// Request timeout (5 minutes for long-running requests)
+const REQUEST_TIMEOUT_MS = 300000;
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -172,6 +175,13 @@ async function handleMessages(request: Request, env: Env): Promise<Response> {
 
   // Handle non-streaming
   try {
+    console.log(`[Claude Bridge] Sending request to ${backend} backend...`);
+    console.log(`[Claude Bridge] Model: ${body.model} → ${mappedModel}`);
+    console.log(`[Claude Bridge] Messages: ${body.messages?.length || 0}`);
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    
     const response = await fetch(`${backendConfig.baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
@@ -179,7 +189,10 @@ async function handleMessages(request: Request, env: Env): Promise<Response> {
         Authorization: `Bearer ${backendApiKey}`,
       },
       body: JSON.stringify(openaiReq),
+      signal: controller.signal,
     });
+    
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorText = await response.text();

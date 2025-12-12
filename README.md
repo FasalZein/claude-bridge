@@ -182,9 +182,10 @@ echo "sk-claude-bridge-$(openssl rand -hex 16)"
 
 ### Algion
 - **Endpoint**: `https://api.algion.dev/v1`
-- **Format**: Anthropic-native
-- **Model names**: Simplified (e.g., `claude-sonnet-4`)
-- **Auth header**: `x-api-key: xxx`
+- **Format**: OpenAI-compatible
+- **Model names**: Simplified (e.g., `claude-sonnet-4`, `claude-opus-4.5`, `claude-sonnet-4.5`, `claude-haiku-4.5`)
+- **Auth header**: `Authorization: Bearer xxx`
+- **Note**: Free service, may have slower response times during peak usage
 
 ## Model Mapping
 
@@ -334,6 +335,12 @@ Use local development instead: `bun run dev` or `claude-bridge`.
 
 ### Connection refused
 Make sure port 4242 is available and the bridge is running.
+
+### Slow responses / "Channelling..." stuck
+- **First request delay**: The Claude tokenizer takes a few seconds to initialize on first use
+- **Algion delays**: As a free service, Algion may have slower response times during peak usage
+- **Large context**: Requests with lots of context (like Claude Code) take longer to process
+- **Solution**: Wait for the first request to complete, subsequent requests will be faster
 
 ## How It Works
 
