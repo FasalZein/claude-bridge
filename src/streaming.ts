@@ -25,8 +25,10 @@ export async function streamAndConvert(
   let toolStarted = false;
   let stopReason: "end_turn" | "max_tokens" | "tool_use" = "end_turn";
 
+  const startTime = Date.now();
   console.log(`[Claude Bridge] Starting streaming request to ${baseUrl}`);
   console.log(`[Claude Bridge] Model: ${openaiReq.model}`);
+  console.log(`[Claude Bridge] Messages count: ${openaiReq.messages.length}`);
 
   return new ReadableStream({
     async start(controller) {
@@ -72,7 +74,9 @@ export async function streamAndConvert(
         });
         
         clearTimeout(timeoutId);
-        console.log(`[Claude Bridge] Got response: ${response.status}`);
+        const responseTime = Date.now() - startTime;
+        console.log(`[Claude Bridge] Got response: ${response.status} ${response.statusText} (${responseTime}ms)`);
+        console.log(`[Claude Bridge] Response headers: content-type=${response.headers.get('content-type')}`);
 
         if (!response.ok) {
           const errorBody = await response.text();
@@ -101,9 +105,19 @@ export async function streamAndConvert(
         const decoder = new TextDecoder();
         let buffer = "";
 
+        let chunkCount = 0;
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            console.log(`[Claude Bridge] Stream ended after ${chunkCount} chunks`);
+            break;
+          }
+          
+          chunkCount++;
+          if (chunkCount === 1) {
+            const firstChunkTime = Date.now() - startTime;
+            console.log(`[Claude Bridge] Received first chunk (${firstChunkTime}ms from start)`);
+          }
 
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split("\n");
