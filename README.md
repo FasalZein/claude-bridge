@@ -38,7 +38,7 @@ An Anthropic API Gateway that lets you use **A4F** or **Algion** APIs with tools
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/claude-bridge.git
+git clone https://github.com/FasalZein/claude-bridge.git
 cd claude-bridge
 
 # Run setup
