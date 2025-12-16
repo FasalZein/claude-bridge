@@ -5,18 +5,12 @@
 // Environment configuration
 export interface Env {
   A4F_API_KEY: string;        // A4F API key
-  ALGION_API_KEY: string;     // Algion API key
   VALID_API_KEYS: string;     // Comma-separated list of user keys
-  BACKEND: string;            // "a4f" or "algion"
 }
 
-// Backend types
-export type BackendType = "a4f" | "algion";
-export type BackendFormat = "openai" | "anthropic";
-
+// Backend configuration
 export interface BackendConfig {
   baseUrl: string;
-  format: BackendFormat;
   modelMapping: Record<string, string>;
 }
 

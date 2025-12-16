@@ -73,26 +73,17 @@ echo
 if [ ! -f "$SCRIPT_DIR/.dev.vars" ]; then
     echo -e "${YELLOW}Creating .dev.vars configuration file...${NC}"
     
-    # Prompt for API keys
+    # Prompt for A4F API key
     echo -e "${WHITE}Enter your A4F API key (or press Enter to skip):${NC}"
     read -r A4F_KEY
-    
-    echo -e "${WHITE}Enter your Algion API key (or press Enter to skip):${NC}"
-    read -r ALGION_KEY
     
     # Generate a user API key
     USER_KEY="sk-claude-bridge-$(openssl rand -hex 16)"
     
     # Create the config file
     cat > "$SCRIPT_DIR/.dev.vars" << EOF
-# Backend selection: "a4f" or "algion"
-BACKEND=a4f
-
-# A4F Configuration
+# A4F API Key
 A4F_API_KEY=${A4F_KEY:-your-a4f-key-here}
-
-# Algion Configuration
-ALGION_API_KEY=${ALGION_KEY:-your-algion-key-here}
 
 # User API keys (comma-separated) - Use these in your clients
 VALID_API_KEYS=$USER_KEY
@@ -146,9 +137,7 @@ echo
 echo -e "${GREEN}${BOLD}Setup complete!${NC}"
 echo
 echo -e "${WHITE}To start Claude Bridge:${NC}"
-echo -e "  ${CYAN}claude-bridge${NC}          # Start with default backend (A4F)"
-echo -e "  ${CYAN}claude-bridge a4f${NC}      # Start with A4F backend"
-echo -e "  ${CYAN}claude-bridge algion${NC}   # Start with Algion backend"
+echo -e "  ${CYAN}claude-bridge${NC}          # Start the bridge"
 echo
 echo -e "${WHITE}To use with Claude Code:${NC}"
 echo -e "  ${CYAN}ANTHROPIC_BASE_URL=\"http://localhost:4242\" ANTHROPIC_API_KEY=\"your-user-key\" claude${NC}"

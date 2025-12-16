@@ -22,13 +22,7 @@ export async function streamAndConvert(
   let accumulatedText = "";
   let contentIndex = 0;
   let textStarted = false;
-  let toolStarted = false;
   let stopReason: "end_turn" | "max_tokens" | "tool_use" = "end_turn";
-
-  const startTime = Date.now();
-  console.log(`[Claude Bridge] Starting streaming request to ${baseUrl}`);
-  console.log(`[Claude Bridge] Model: ${openaiReq.model}`);
-  console.log(`[Claude Bridge] Messages count: ${openaiReq.messages.length}`);
 
   return new ReadableStream({
     async start(controller) {
@@ -58,33 +52,74 @@ export async function streamAndConvert(
       try {
         const abortController = new AbortController();
         const timeoutId = setTimeout(() => {
-          console.log(`[Claude Bridge] Request timeout after ${STREAM_TIMEOUT_MS}ms`);
+          console.error(`[Claude Bridge] Stream timeout after ${STREAM_TIMEOUT_MS}ms`);
           abortController.abort();
         }, STREAM_TIMEOUT_MS);
+
+        let response: Response;
+        let retries = 0;
+        const maxRetries = 2;
         
-        console.log(`[Claude Bridge] Sending streaming request...`);
-        const response = await fetch(`${baseUrl}/chat/completions`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify(openaiReq),
-          signal: abortController.signal,
-        });
-        
+        while (true) {
+          try {
+            response = await fetch(`${baseUrl}/chat/completions`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${apiKey}`,
+              },
+              body: JSON.stringify(openaiReq),
+              signal: abortController.signal,
+            });
+            break; // Success, exit retry loop
+          } catch (fetchError) {
+            retries++;
+            if (retries >= maxRetries) {
+              throw fetchError;
+            }
+            console.error(`[Claude Bridge] Stream fetch failed, retrying (${retries}/${maxRetries})...`);
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+          }
+        }
+
         clearTimeout(timeoutId);
-        const responseTime = Date.now() - startTime;
-        console.log(`[Claude Bridge] Got response: ${response.status} ${response.statusText} (${responseTime}ms)`);
-        console.log(`[Claude Bridge] Response headers: content-type=${response.headers.get('content-type')}`);
 
         if (!response.ok) {
           const errorBody = await response.text();
+          console.error(`[Claude Bridge] Stream API Error: ${response.status} - ${errorBody}`);
+          
+          // Map HTTP status codes to Anthropic error types
+          let errorType = "api_error";
+          if (response.status === 429) {
+            errorType = "rate_limit_error";
+          } else if (response.status === 401) {
+            errorType = "authentication_error";
+          } else if (response.status === 400) {
+            errorType = "invalid_request_error";
+          } else if (response.status === 403) {
+            errorType = "permission_error";
+          } else if (response.status === 404) {
+            errorType = "not_found_error";
+          } else if (response.status === 413) {
+            errorType = "request_too_large";
+          } else if (response.status === 529) {
+            errorType = "overloaded_error";
+          } else if (response.status >= 500) {
+            errorType = "api_error";
+          }
+          
+          // For rate limit errors, include retry information in the error message
+          let errorMessage = errorBody;
+          if (response.status === 429) {
+            const retryAfter = response.headers.get("retry-after") || "1";
+            errorMessage = `Rate limit exceeded. Retry after ${retryAfter} seconds. ${errorBody}`;
+          }
+          
           const errorEvent = {
             type: "error",
             error: {
-              type: "api_error",
-              message: errorBody,
+              type: errorType,
+              message: errorMessage,
             },
           };
           controller.enqueue(
@@ -105,19 +140,9 @@ export async function streamAndConvert(
         const decoder = new TextDecoder();
         let buffer = "";
 
-        let chunkCount = 0;
         while (true) {
           const { done, value } = await reader.read();
-          if (done) {
-            console.log(`[Claude Bridge] Stream ended after ${chunkCount} chunks`);
-            break;
-          }
-          
-          chunkCount++;
-          if (chunkCount === 1) {
-            const firstChunkTime = Date.now() - startTime;
-            console.log(`[Claude Bridge] Received first chunk (${firstChunkTime}ms from start)`);
-          }
+          if (done) break;
 
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split("\n");
@@ -174,84 +199,14 @@ export async function streamAndConvert(
                   )
                 );
               }
-
-              // Handle tool calls
-              if (delta?.tool_calls) {
-                for (const tc of delta.tool_calls) {
-                  if (tc.id) {
-                    // New tool call starting
-                    if (textStarted) {
-                      const blockStop = {
-                        type: "content_block_stop",
-                        index: contentIndex,
-                      };
-                      controller.enqueue(
-                        encoder.encode(
-                          `event: content_block_stop\ndata: ${JSON.stringify(blockStop)}\n\n`
-                        )
-                      );
-                      contentIndex++;
-                      textStarted = false;
-                    }
-
-                    if (toolStarted) {
-                      const blockStop = {
-                        type: "content_block_stop",
-                        index: contentIndex,
-                      };
-                      controller.enqueue(
-                        encoder.encode(
-                          `event: content_block_stop\ndata: ${JSON.stringify(blockStop)}\n\n`
-                        )
-                      );
-                      contentIndex++;
-                    }
-
-                    toolStarted = true;
-                    const toolStart = {
-                      type: "content_block_start",
-                      index: contentIndex,
-                      content_block: {
-                        type: "tool_use",
-                        id: tc.id,
-                        name: tc.function?.name || "",
-                        input: {},
-                      },
-                    };
-                    controller.enqueue(
-                      encoder.encode(
-                        `event: content_block_start\ndata: ${JSON.stringify(toolStart)}\n\n`
-                      )
-                    );
-                  }
-
-                  if (tc.function?.arguments) {
-                    accumulatedText += tc.function.arguments;
-
-                    const toolDelta = {
-                      type: "content_block_delta",
-                      index: contentIndex,
-                      delta: {
-                        type: "input_json_delta",
-                        partial_json: tc.function.arguments,
-                      },
-                    };
-                    controller.enqueue(
-                      encoder.encode(
-                        `event: content_block_delta\ndata: ${JSON.stringify(toolDelta)}\n\n`
-                      )
-                    );
-                  }
-                }
-              }
             } catch {
               // Skip malformed JSON
             }
           }
         }
 
-        // Close content blocks
-        if (textStarted || toolStarted) {
+        // Close any open content blocks
+        if (textStarted) {
           const blockStop = {
             type: "content_block_stop",
             index: contentIndex,
@@ -293,11 +248,27 @@ export async function streamAndConvert(
 
         controller.close();
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(`[Claude Bridge] Stream failed: ${errorMessage}`);
+        
+        // Determine error type based on the error
+        let errorType = "api_error";
+        let userMessage = errorMessage;
+        
+        // Check for specific error types
+        if (errorMessage.includes("abort") || errorMessage.includes("timeout")) {
+          errorType = "api_error";
+          userMessage = `Request timed out. ${errorMessage}`;
+        } else if (errorMessage.includes("fetch") || errorMessage.includes("network") || errorMessage.includes("ECONNREFUSED")) {
+          errorType = "api_error";
+          userMessage = `Connection error. ${errorMessage}`;
+        }
+        
         const errorEvent = {
           type: "error",
           error: {
-            type: "api_error",
-            message: error instanceof Error ? error.message : String(error),
+            type: errorType,
+            message: userMessage,
           },
         };
         controller.enqueue(

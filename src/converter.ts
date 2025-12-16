@@ -215,14 +215,10 @@ export function convertRequest(req: AnthropicRequest, mappedModel: string): Open
     openaiReq.stop = req.stop_sequences;
   }
 
-  if (req.tools) {
-    openaiReq.tools = convertTools(req.tools);
-  }
-
-  if (req.tool_choice) {
-    openaiReq.tool_choice = convertToolChoice(req.tool_choice);
-  }
-
+  // Note: A4F doesn't support native tools API for Claude models
+  // Roo Code uses XML tools in system prompt which works fine
+  // We don't include tools in the request as they cause errors with A4F
+  
   if (req.metadata?.user_id) {
     openaiReq.user = req.metadata.user_id;
   }

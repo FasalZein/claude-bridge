@@ -1,6 +1,6 @@
 # Claude Bridge 🌉
 
-An Anthropic API Gateway that lets you use **A4F** or **Algion** APIs with tools that expect the **Anthropic API** (like Claude Code, Roo Code, Cline, etc.).
+An Anthropic API Gateway that lets you use **A4F** API with tools that expect the **Anthropic API** (like Roo Code, Cline, etc.).
 
 ```
     ╔═══════════════════════════════════════════════════════════════╗
@@ -19,20 +19,21 @@ An Anthropic API Gateway that lets you use **A4F** or **Algion** APIs with tools
     ║  ██████╔╝██║  ██║██║██████╔╝╚██████╔╝███████╗                ║
     ║  ╚═════╝ ╚═╝  ╚═╝╚═╝╚═════╝  ╚═════╝ ╚══════╝                ║
     ║                                                               ║
-    ║           🌉 Anthropic API Gateway for A4F/Algion 🌉          ║
+    ║           🌉 Anthropic API Gateway for A4F 🌉                 ║
     ║                                                               ║
     ╚═══════════════════════════════════════════════════════════════╝
 ```
 
 ## Features
 
-- ✅ **Full Anthropic API compatibility** - Works with Claude Code, Roo Code, Cline, and any Anthropic SDK
-- ✅ **Multi-backend support** - Switch between A4F and Algion with a single command
+- ✅ **Full Anthropic API compatibility** - Works with Roo Code, Cline, and any Anthropic SDK
+- ✅ **A4F backend** - Uses A4F's OpenAI-compatible API
 - ✅ **Streaming support** - Real-time SSE streaming with proper event conversion
-- ✅ **Tool calling** - Full support for function calling and tool use
+- ✅ **XML-based tools** - Works with tools that use XML format in system prompt (like Roo Code)
 - ✅ **Token counting** - Accurate token counting with Claude's tokenizer
-- ✅ **Model name mapping** - Automatically maps Anthropic model names to backend formats
+- ✅ **Model name mapping** - Automatically maps Anthropic model names to A4F format
 - ✅ **Simple CLI** - Start with `claude-bridge` command from anywhere
+- ✅ **Proper error handling** - Maps rate limit and other errors correctly
 
 ## Quick Start
 
@@ -49,7 +50,7 @@ The setup script will:
 1. Install Bun (if needed)
 2. Install dependencies
 3. Create your configuration file (`.dev.vars`)
-4. Prompt for your API keys
+4. Prompt for your A4F API key
 5. Generate a user API key
 6. Install the `claude-bridge` command globally
 
@@ -58,14 +59,8 @@ The setup script will:
 ### Start the Bridge
 
 ```bash
-# Start with default backend (from .dev.vars)
+# Start the bridge
 claude-bridge
-
-# Start with A4F backend
-claude-bridge a4f
-
-# Start with Algion backend
-claude-bridge algion
 
 # Show help
 claude-bridge --help
@@ -75,31 +70,6 @@ claude-bridge --status
 
 # Test the bridge with a quick request
 claude-bridge --test
-
-# Show current backend
-claude-bridge --backend
-```
-
-### Use with Claude Code
-
-```bash
-# Terminal 1: Start the bridge
-claude-bridge
-
-# Terminal 2: Run Claude Code with bridge
-ANTHROPIC_BASE_URL="http://localhost:4242" \
-ANTHROPIC_API_KEY="sk-claude-bridge-xxx" \
-claude
-```
-
-**Pro tip:** Add an alias to your `~/.zshrc` for convenience:
-
-```bash
-# Add to ~/.zshrc
-alias claude-local='ANTHROPIC_BASE_URL="http://localhost:4242" ANTHROPIC_API_KEY="sk-claude-bridge-xxx" claude'
-
-# Then just run:
-claude-local
 ```
 
 ### Use with Roo Code / Cline (VS Code)
@@ -142,17 +112,11 @@ curl -X POST http://localhost:4242/v1/messages \
 
 ## Configuration
 
-Edit `.dev.vars` to configure your API keys and backend:
+Edit `.dev.vars` to configure your API keys:
 
 ```bash
-# Backend selection: "a4f" or "algion"
-BACKEND=a4f
-
 # A4F API key (get from A4F)
 A4F_API_KEY=ddc-a4f-your-key-here
-
-# Algion API key (get from Algion)
-ALGION_API_KEY=algion_your-key-here
 
 # User API keys - what you use in your clients (comma-separated for multiple)
 VALID_API_KEYS=sk-claude-bridge-xxx
@@ -161,7 +125,6 @@ VALID_API_KEYS=sk-claude-bridge-xxx
 ### Getting API Keys
 
 - **A4F**: Sign up at [A4F](https://a4f.co) to get your API key
-- **Algion**: Sign up at [Algion](https://algion.dev) to get your API key
 
 ### Generate a New User Key
 
@@ -172,32 +135,24 @@ echo "sk-claude-bridge-$(openssl rand -hex 16)"
 # Add it to your .dev.vars VALID_API_KEYS
 ```
 
-## Supported Backends
+## A4F Backend
 
-### A4F
 - **Endpoint**: `https://api.a4f.co/v1`
 - **Format**: OpenAI-compatible
 - **Model prefix**: `provider-7/` (added automatically)
 - **Auth header**: `Authorization: Bearer xxx`
 
-### Algion
-- **Endpoint**: `https://api.algion.dev/v1`
-- **Format**: OpenAI-compatible
-- **Model names**: Simplified (e.g., `claude-sonnet-4`, `claude-opus-4.5`, `claude-sonnet-4.5`, `claude-haiku-4.5`)
-- **Auth header**: `Authorization: Bearer xxx`
-- **Note**: Free service, may have slower response times during peak usage
-
 ## Model Mapping
 
-The bridge automatically maps model names to the correct format for each backend:
+The bridge automatically maps model names to the correct format for A4F:
 
-| You send | A4F receives | Algion receives |
-|----------|--------------|-----------------|
-| `claude-sonnet-4-20250514` | `provider-7/claude-sonnet-4-20250514` | `claude-sonnet-4` |
-| `claude-sonnet-4-5-20250929` | `provider-7/claude-sonnet-4-5-20250929` | `claude-sonnet-4.5` |
-| `claude-opus-4-5-20251101` | `provider-7/claude-opus-4-5-20251101` | `claude-opus-4.5` |
-| `claude-haiku-4-5-20251001` | `provider-7/claude-haiku-4-5-20251001` | `claude-haiku-4.5` |
-| `claude-3-5-sonnet-20241022` | `provider-7/claude-3-5-sonnet-20241022` | `claude-3.5-sonnet` |
+| You send | A4F receives |
+|----------|--------------|
+| `claude-sonnet-4-20250514` | `provider-7/claude-sonnet-4-20250514` |
+| `claude-sonnet-4-5-20250929` | `provider-7/claude-sonnet-4-5-20250929` |
+| `claude-opus-4-5-20251101` | `provider-7/claude-opus-4-5-20251101` |
+| `claude-haiku-4-5-20251001` | `provider-7/claude-haiku-4-5-20251001` |
+| `claude-3-5-sonnet-20241022` | `provider-7/claude-3-5-sonnet-20241022` |
 
 Model names with version dates (like those from Claude Code) are automatically converted.
 
@@ -258,7 +213,7 @@ claude-bridge/
 ├── src/
 │   ├── index.ts          # Main entry point, request routing
 │   ├── types.ts          # TypeScript interfaces
-│   ├── backends.ts       # A4F & Algion configurations
+│   ├── backends.ts       # A4F configuration
 │   ├── converter.ts      # Anthropic ↔ OpenAI format conversion
 │   ├── streaming.ts      # SSE streaming handler
 │   └── tokenizer.ts      # Token counting with Claude tokenizer
@@ -282,7 +237,7 @@ bun install
 
 # 3. Copy and edit config
 cp .dev.vars.example .dev.vars
-# Edit .dev.vars with your API keys
+# Edit .dev.vars with your A4F API key
 
 # 4. Create the CLI from template
 sed "s|__PROJECT_DIR__|$(pwd)|g" bin/claude-bridge.template > bin/claude-bridge
@@ -328,7 +283,7 @@ Make sure you started the bridge with `claude-bridge` or `bun run dev`.
 Check that your client is using a key from `VALID_API_KEYS` in `.dev.vars`.
 
 ### "Model not supported"
-The bridge maps model names automatically. If you're using an unusual model name, check the backend's supported models.
+The bridge maps model names automatically. If you're using an unusual model name, check A4F's supported models.
 
 ### "CPU limit exceeded" (Cloudflare)
 Use local development instead: `bun run dev` or `claude-bridge`.
@@ -338,7 +293,6 @@ Make sure port 4242 is available and the bridge is running.
 
 ### Slow responses / "Channelling..." stuck
 - **First request delay**: The Claude tokenizer takes a few seconds to initialize on first use
-- **Algion delays**: As a free service, Algion may have slower response times during peak usage
 - **Large context**: Requests with lots of context (like Claude Code) take longer to process
 - **Solution**: Wait for the first request to complete, subsequent requests will be faster
 
@@ -346,10 +300,10 @@ Make sure port 4242 is available and the bridge is running.
 
 ```
 ┌─────────────┐     ┌──────────────────┐     ┌─────────────┐
-│ Claude Code │────▶│  Claude Bridge   │────▶│  A4F/Algion │
-│ Roo Code    │◀────│  localhost:4242  │◀────│   Backend   │
-│ Cline       │     └──────────────────┘     └─────────────┘
-└─────────────┘           │
+│  Roo Code   │────▶│  Claude Bridge   │────▶│     A4F     │
+│   Cline     │◀────│  localhost:4242  │◀────│   Backend   │
+└─────────────┘     └──────────────────┘     └─────────────┘
+                          │
                           ▼
               ┌──────────────────────┐
               │ • Format conversion   │
@@ -357,14 +311,23 @@ Make sure port 4242 is available and the bridge is running.
               │ • Auth translation    │
               │ • SSE streaming       │
               │ • Token counting      │
+              │ • Error type mapping  │
               └──────────────────────┘
 ```
 
 1. **Client** sends Anthropic-format request to `localhost:4242`
-2. **Bridge** validates API key and converts request to backend format
-3. **Backend** (A4F/Algion) processes the request
+2. **Bridge** validates API key and converts request to OpenAI format
+3. **A4F** processes the request
 4. **Bridge** converts response back to Anthropic format
 5. **Client** receives standard Anthropic response
+
+## Limitations
+
+### Claude Code Not Supported
+
+Claude Code uses Anthropic's native tools API for its tool calling functionality. A4F does not support the native tools API for Claude models, so Claude Code's tools UI will not work through this bridge.
+
+**Roo Code works** because it uses XML-based tools embedded in the system prompt, which doesn't require native tools API support.
 
 ## License
 

@@ -1,5 +1,5 @@
 // ============================================================================
-// Claude Bridge - Anthropic API Gateway
+// Claude Bridge - Anthropic API Gateway for A4F
 // Main entry point for the Cloudflare Worker
 // ============================================================================
 
@@ -95,10 +95,9 @@ async function handleMessages(request: Request, env: Env): Promise<Response> {
     );
   }
 
-  // Get backend configuration
-  const backend = env.BACKEND || "a4f";
-  const backendConfig = getBackendConfig(backend);
-  const backendApiKey = getBackendApiKey(env, backend);
+  // Get A4F backend configuration
+  const backendConfig = getBackendConfig();
+  const backendApiKey = getBackendApiKey(env);
 
   if (!backendApiKey) {
     return new Response(
@@ -106,7 +105,7 @@ async function handleMessages(request: Request, env: Env): Promise<Response> {
         type: "error",
         error: {
           type: "api_error",
-          message: `Server configuration error: ${backend.toUpperCase()} API key not configured`,
+          message: "Server configuration error: A4F API key not configured",
         },
       }),
       {
@@ -154,10 +153,12 @@ async function handleMessages(request: Request, env: Env): Promise<Response> {
     );
   }
 
-  // Map model name for the backend
-  const mappedModel = mapModelName(body.model, backend);
+  // Map model name for A4F
+  const mappedModel = mapModelName(body.model);
 
   // Convert request to OpenAI format
+  // Note: A4F doesn't support native tools API for Claude models
+  // Roo Code uses XML tools in system prompt which works fine
   const openaiReq = convertRequest(body, mappedModel);
 
   // Handle streaming
@@ -175,10 +176,6 @@ async function handleMessages(request: Request, env: Env): Promise<Response> {
 
   // Handle non-streaming
   try {
-    console.log(`[Claude Bridge] Sending request to ${backend} backend...`);
-    console.log(`[Claude Bridge] Model: ${body.model} → ${mappedModel}`);
-    console.log(`[Claude Bridge] Messages: ${body.messages?.length || 0}`);
-    
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     
@@ -196,17 +193,65 @@ async function handleMessages(request: Request, env: Env): Promise<Response> {
 
     if (!response.ok) {
       const errorText = await response.text();
+      console.error(`[Claude Bridge] API Error: ${response.status} - ${errorText}`);
+      
+      // Map HTTP status codes to Anthropic error types
+      let errorType = "api_error";
+      if (response.status === 429) {
+        errorType = "rate_limit_error";
+      } else if (response.status === 401) {
+        errorType = "authentication_error";
+      } else if (response.status === 400) {
+        errorType = "invalid_request_error";
+      } else if (response.status === 403) {
+        errorType = "permission_error";
+      } else if (response.status === 404) {
+        errorType = "not_found_error";
+      } else if (response.status === 413) {
+        errorType = "request_too_large";
+      } else if (response.status === 529) {
+        errorType = "overloaded_error";
+      } else if (response.status >= 500) {
+        errorType = "api_error";
+      }
+      
+      // Build response headers
+      const responseHeaders: Record<string, string> = {
+        ...CORS_HEADERS,
+        "Content-Type": "application/json"
+      };
+      
+      // Add Anthropic-specific rate limit headers for rate limit errors
+      // This helps clients like Roo Code properly recognize rate limits
+      if (response.status === 429) {
+        // Set rate limit status header
+        responseHeaders["anthropic-ratelimit-unified-status"] = "rate_limited";
+        
+        // Forward or set retry-after header
+        const retryAfter = response.headers.get("retry-after");
+        if (retryAfter) {
+          responseHeaders["retry-after"] = retryAfter;
+          // Also set the Anthropic-specific reset header (in seconds from epoch)
+          const resetTime = Math.floor(Date.now() / 1000) + parseInt(retryAfter, 10);
+          responseHeaders["anthropic-ratelimit-unified-reset"] = resetTime.toString();
+        } else {
+          // Default to 1 second retry
+          responseHeaders["retry-after"] = "1";
+          responseHeaders["anthropic-ratelimit-unified-reset"] = (Math.floor(Date.now() / 1000) + 1).toString();
+        }
+      }
+      
       return new Response(
         JSON.stringify({
           type: "error",
           error: {
-            type: "api_error",
+            type: errorType,
             message: errorText,
           },
         }),
         {
           status: response.status,
-          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+          headers: responseHeaders,
         }
       );
     }
@@ -219,6 +264,7 @@ async function handleMessages(request: Request, env: Env): Promise<Response> {
       headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
     });
   } catch (error) {
+    console.error(`[Claude Bridge] Request failed: ${error instanceof Error ? error.message : String(error)}`);
     return new Response(
       JSON.stringify({
         type: "error",
@@ -293,13 +339,12 @@ async function handleCountTokens(request: Request): Promise<Response> {
   });
 }
 
-function handleHealth(env: Env): Response {
-  const backend = env.BACKEND || "a4f";
+function handleHealth(): Response {
   return new Response(
-    JSON.stringify({ 
-      status: "ok", 
+    JSON.stringify({
+      status: "ok",
       service: "claude-bridge",
-      backend: backend,
+      backend: "a4f",
     }),
     {
       headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
@@ -320,14 +365,11 @@ interface BackendModelsResponse {
 }
 
 async function handleModels(env: Env): Promise<Response> {
-  const backend = env.BACKEND || "a4f";
-  const backendConfig = getBackendConfig(backend);
-  const backendApiKey = getBackendApiKey(env, backend);
+  const backendConfig = getBackendConfig();
+  const backendApiKey = getBackendApiKey(env);
 
   try {
-    const url = backend === "a4f" 
-      ? `${backendConfig.baseUrl}/models?plan=ultra`
-      : `${backendConfig.baseUrl}/models`;
+    const url = `${backendConfig.baseUrl}/models?plan=ultra`;
 
     const response = await fetch(url, {
       method: "GET",
@@ -438,7 +480,7 @@ export default {
     }
 
     if (pathname === "/health" && method === "GET") {
-      return handleHealth(env);
+      return handleHealth();
     }
 
     if (pathname === "/v1/models" && method === "GET") {

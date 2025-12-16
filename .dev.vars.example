@@ -1,16 +1,9 @@
 # Claude Bridge Configuration
 # Copy this file to .dev.vars and fill in your API keys
 
-# Backend selection: "a4f" or "algion"
-BACKEND=a4f
-
-# A4F Configuration
-# Get your key from A4F
+# A4F API Key
+# Get your key from A4F (https://a4f.co)
 A4F_API_KEY=ddc-a4f-your-key-here
-
-# Algion Configuration
-# Get your key from Algion
-ALGION_API_KEY=algion_your-key-here
 
 # User API keys (comma-separated)
 # These are the keys you use in your clients (Roo Code, Claude Code, etc.)

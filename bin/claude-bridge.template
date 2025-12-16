@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Claude Bridge - Anthropic API Gateway for A4F/Algion
+# Claude Bridge - Anthropic API Gateway for A4F
 #
 # SYMLINK SETUP:
 #   chmod +x bin/claude-bridge
@@ -16,7 +16,6 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-MAGENTA='\033[0;35m'
 CYAN='\033[0;36m'
 WHITE='\033[1;37m'
 GRAY='\033[0;90m'
@@ -49,7 +48,7 @@ print_logo() {
     ║  ██████╔╝██║  ██║██║██████╔╝╚██████╔╝███████╗                ║
     ║  ╚═════╝ ╚═╝  ╚═╝╚═╝╚═════╝  ╚═════╝ ╚══════╝                ║
     ║                                                               ║
-    ║           🌉 Anthropic API Gateway for A4F/Algion 🌉          ║
+    ║              🌉 Anthropic API Gateway for A4F 🌉              ║
     ║                                                               ║
     ╚═══════════════════════════════════════════════════════════════╝
 EOF
@@ -77,30 +76,8 @@ check_deps() {
 check_env() {
     if [ ! -f "$PROJECT_DIR/.dev.vars" ]; then
         echo -e "${RED}✗ Missing .dev.vars file${NC}"
-        echo -e "${GRAY}  Create: A4F_API_KEY=xxx, ALGION_API_KEY=xxx, VALID_API_KEYS=sk-xxx${NC}"
+        echo -e "${GRAY}  Create: A4F_API_KEY=xxx, VALID_API_KEYS=sk-xxx${NC}"
         exit 1
-    fi
-}
-
-# Set backend in .dev.vars
-set_backend() {
-    local backend="$1"
-    if [ -f "$PROJECT_DIR/.dev.vars" ]; then
-        # Update BACKEND line or add it
-        if grep -q "^BACKEND=" "$PROJECT_DIR/.dev.vars"; then
-            sed -i '' "s/^BACKEND=.*/BACKEND=$backend/" "$PROJECT_DIR/.dev.vars"
-        else
-            echo "BACKEND=$backend" >> "$PROJECT_DIR/.dev.vars"
-        fi
-    fi
-}
-
-# Get current backend
-get_backend() {
-    if [ -f "$PROJECT_DIR/.dev.vars" ]; then
-        grep "^BACKEND=" "$PROJECT_DIR/.dev.vars" | cut -d'=' -f2 || echo "a4f"
-    else
-        echo "a4f"
     fi
 }
 
@@ -115,17 +92,8 @@ get_user_key() {
 
 # Show connection info box
 show_info() {
-    local backend=$(get_backend)
-    local backend_display=""
-    
-    if [ "$backend" = "algion" ]; then
-        backend_display="${MAGENTA}Algion${NC}"
-    else
-        backend_display="${BLUE}A4F${NC}"
-    fi
-    
     echo -e "  ${CYAN}╭─────────────────────────────────────────────────────────────╮${NC}"
-    echo -e "  ${CYAN}│${NC}  ${BOLD}${WHITE}🌉 Claude Bridge${NC}  [Backend: $backend_display]                    ${CYAN}│${NC}"
+    echo -e "  ${CYAN}│${NC}  ${BOLD}${WHITE}🌉 Claude Bridge${NC}  [Backend: ${BLUE}A4F${NC}]                         ${CYAN}│${NC}"
     echo -e "  ${CYAN}├─────────────────────────────────────────────────────────────┤${NC}"
     echo -e "  ${CYAN}│${NC}  ${GREEN}►${NC} ${WHITE}http://localhost:4242${NC}                                   ${CYAN}│${NC}"
     echo -e "  ${CYAN}│${NC}  ${GRAY}Messages:${NC} /v1/messages  ${GRAY}Health:${NC} /health                  ${CYAN}│${NC}"
@@ -135,8 +103,6 @@ show_info() {
 
 # Main startup sequence
 main() {
-    local backend="${1:-}"
-    
     clear
     print_logo
     
@@ -144,41 +110,29 @@ main() {
     check_deps
     check_env
     
-    # Set backend if specified
-    if [ -n "$backend" ]; then
-        set_backend "$backend"
-        echo -e "  ${GREEN}✓${NC} Backend set to ${BOLD}$backend${NC}"
-    fi
-    
     show_info
     
     echo -e "  ${GREEN}✨ Starting server...${NC} ${DIM}(Ctrl+C to stop)${NC}"
     echo
     
     cd "$PROJECT_DIR"
-    exec bun run dev
+    # Use WRANGLER_LOG=error to suppress HTTP access logs (only show errors)
+    exec env WRANGLER_LOG=error bun run dev
 }
 
 # Handle arguments
 case "${1:-}" in
     --help|-h)
         print_logo
-        echo -e "  ${BOLD}Usage:${NC} claude-bridge [backend] [options]"
-        echo
-        echo -e "  ${BOLD}Backends:${NC}"
-        echo -e "    ${CYAN}a4f${NC}        Use A4F backend (default)"
-        echo -e "    ${CYAN}algion${NC}     Use Algion backend"
+        echo -e "  ${BOLD}Usage:${NC} claude-bridge [options]"
         echo
         echo -e "  ${BOLD}Options:${NC}"
         echo -e "    ${CYAN}--help, -h${NC}     Show this help message"
         echo -e "    ${CYAN}--status, -s${NC}   Check if server is running"
         echo -e "    ${CYAN}--test, -t${NC}     Run a test request"
-        echo -e "    ${CYAN}--backend, -b${NC}  Show current backend"
         echo
         echo -e "  ${BOLD}Examples:${NC}"
-        echo -e "    claude-bridge              # Start with current backend"
-        echo -e "    claude-bridge a4f          # Start with A4F backend"
-        echo -e "    claude-bridge algion       # Start with Algion backend"
+        echo -e "    claude-bridge              # Start the bridge"
         echo
         echo -e "  ${BOLD}With Claude Code:${NC}"
         local user_key=$(get_user_key)
@@ -189,8 +143,7 @@ case "${1:-}" in
         echo -ne "  ${YELLOW}🌉${NC} Bridge status: "
         if curl -s http://localhost:4242/health > /dev/null 2>&1; then
             response=$(curl -s http://localhost:4242/health)
-            backend=$(echo "$response" | grep -o '"backend":"[^"]*"' | cut -d'"' -f4)
-            echo -e "${GREEN}✓ Running${NC} [Backend: ${BOLD}$backend${NC}]"
+            echo -e "${GREEN}✓ Running${NC} [Backend: ${BOLD}A4F${NC}]"
             echo "$response" | jq . 2>/dev/null || echo "$response"
         else
             echo -e "${RED}✗ Not running${NC}"
@@ -216,17 +169,7 @@ case "${1:-}" in
             echo -e "  ${RED}✗ Not responding. Start with: claude-bridge${NC}"
         fi
         ;;
-    --backend|-b)
-        backend=$(get_backend)
-        echo -e "  Current backend: ${BOLD}$backend${NC}"
-        ;;
-    a4f)
-        main "a4f"
-        ;;
-    algion)
-        main "algion"
-        ;;
     *)
-        main ""
+        main
         ;;
 esac
