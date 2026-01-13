@@ -1,13 +1,17 @@
 {
   "name": "claude-bridge",
-  "module": "index.ts",
+  "module": "src/bun/index.ts",
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "WRANGLER_LOG=error wrangler dev",
-    "dev:verbose": "wrangler dev",
+    "start": "bun run src/bun/server.ts",
+    "dev": "bun --watch run src/bun/server.ts",
+    "dev:quiet": "bun run src/bun/server.ts 2>&1 | grep -v '\\[Tokenizer\\]'",
+    "wrangler": "WRANGLER_LOG=error wrangler dev",
+    "wrangler:verbose": "wrangler dev",
     "deploy": "wrangler deploy",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20251205.0",
