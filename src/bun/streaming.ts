@@ -6,6 +6,7 @@
 import { config, ENC, SSE_STOP, STOP_REASON_MAP } from './config'
 import { generateSignature, generateMessageId, buildRequestBody } from './converter'
 import { estimateInputTokens, countTokens } from './tokenizer'
+import { mapModelName } from './providers'
 import type { AnthropicRequest, ProviderConfig, OpenAIStreamChunk } from './types'
 
 // =============================================================================
@@ -45,6 +46,14 @@ export async function handleStream(
   try {
     if (isPassthrough) {
       // CLI Proxy: Send Anthropic format directly to /v1/messages
+      // Map model name for CLI Proxy (e.g., claude-opus-4-5-20251101 -> gemini-claude-opus-4-5-thinking)
+      const mappedModel = mapModelName(request.model, provider)
+      const passthroughRequest = { ...request, model: mappedModel }
+
+      if (mappedModel !== request.model) {
+        console.log(`[Claude Bridge] CLI Proxy model: ${request.model} -> ${mappedModel}`)
+      }
+
       response = await fetchWithTimeout(`${provider.baseUrl}/messages`, {
         method: 'POST',
         headers: {
@@ -52,7 +61,7 @@ export async function handleStream(
           'x-api-key': provider.apiKey,
           'anthropic-version': '2023-06-01'
         },
-        body: JSON.stringify(request)
+        body: JSON.stringify(passthroughRequest)
       })
     } else {
       // A4F: Convert to OpenAI format and send to /chat/completions
@@ -119,8 +128,9 @@ export async function handleStream(
   let accumulatedText = ''
   const toolCalls = new Map<number, { id: string; name: string; args: string }>()
 
-  // Heartbeat to keep connection alive
-  const HEARTBEAT_INTERVAL = 15000 // 15 seconds
+  // Heartbeat to keep connection alive (A4F only - CLI Proxy handles its own)
+  const HEARTBEAT_INTERVAL = 10000 // 10 seconds (more aggressive)
+  const STALL_WARNING = 30000 // Warn if no data for 30 seconds
   const HEARTBEAT = ENC.encode(': heartbeat\n\n')
 
   const stream = new ReadableStream({
@@ -135,25 +145,33 @@ export async function handleStream(
       let lastActivity = Date.now()
       let heartbeatTimer: ReturnType<typeof setInterval> | null = null
       let streamClosed = false
+      let stallWarned = false
 
-      // Start heartbeat timer
+      // Start heartbeat timer - keeps connection alive during long A4F thinking
       heartbeatTimer = setInterval(() => {
         if (streamClosed) {
           if (heartbeatTimer) clearInterval(heartbeatTimer)
           return
         }
         const now = Date.now()
-        if (now - lastActivity > HEARTBEAT_INTERVAL - 1000) {
+        const timeSinceActivity = now - lastActivity
+
+        // Send heartbeat if no recent activity
+        if (timeSinceActivity > HEARTBEAT_INTERVAL - 1000) {
           try {
             controller.enqueue(HEARTBEAT)
-            console.log('[Claude Bridge] Sent heartbeat to keep connection alive')
           } catch {
-            // Stream already closed, stop timer
             streamClosed = true
             if (heartbeatTimer) clearInterval(heartbeatTimer)
           }
         }
-      }, HEARTBEAT_INTERVAL)
+
+        // Warn about stall (only once)
+        if (timeSinceActivity > STALL_WARNING && !stallWarned) {
+          console.log(`[Claude Bridge] A4F stalled for ${Math.round(timeSinceActivity / 1000)}s - still waiting...`)
+          stallWarned = true
+        }
+      }, HEARTBEAT_INTERVAL / 2) // Check twice per interval
 
       try {
         while (true) {
@@ -161,6 +179,7 @@ export async function handleStream(
           if (done) break
 
           lastActivity = Date.now()
+          stallWarned = false // Reset stall warning on activity
           buffer += decoder.decode(value, { stream: true })
           const lines = buffer.split('\n')
           buffer = lines.pop() ?? ''
@@ -324,8 +343,16 @@ export async function handleStream(
       } catch (error) {
         streamClosed = true
         if (heartbeatTimer) clearInterval(heartbeatTimer)
-        console.error(`[Claude Bridge] Stream error: ${error}`)
-        controller.error(error)
+        // Only log if it's not an expected "controller closed" error
+        const errorMsg = String(error)
+        if (!errorMsg.includes('Controller is already closed')) {
+          console.error(`[Claude Bridge] Stream error: ${error}`)
+        }
+        try {
+          controller.error(error)
+        } catch {
+          // Controller already closed, ignore
+        }
       }
     },
 

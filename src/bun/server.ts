@@ -5,7 +5,7 @@
 
 import { config, HEADERS, ERRORS, ROUTE_HASHES } from './config'
 import { loadBalancer } from './load-balancer'
-import { getAvailableProvider, isBackgroundModel, getAvailableModels } from './providers'
+import { getAvailableProvider, isBackgroundModel, getAvailableModels, mapModelName } from './providers'
 import { estimateInputTokens, getTokenizerStatus } from './tokenizer'
 import { convertRequest, convertResponse, generateMessageId } from './converter'
 import { handleStream, fetchWithTimeout } from './streaming'
@@ -79,6 +79,10 @@ async function attemptRequest(
 
     if (isPassthrough) {
       // CLI Proxy: Send Anthropic format directly to /v1/messages
+      // Map model name for CLI Proxy (e.g., claude-opus-4-5-20251101 -> gemini-claude-opus-4-5-thinking)
+      const mappedModel = mapModelName(body.model, provider)
+      const passthroughRequest = { ...body, model: mappedModel }
+
       response = await fetchWithTimeout(`${provider.baseUrl}/messages`, {
         method: 'POST',
         headers: {
@@ -86,7 +90,7 @@ async function attemptRequest(
           'x-api-key': provider.apiKey,
           'anthropic-version': '2023-06-01'
         },
-        body: JSON.stringify(body)
+        body: JSON.stringify(passthroughRequest)
       })
 
       if (!response.ok) {
